@@ -20,6 +20,7 @@ import {
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getLoggedInUser, signIn, signUp } from "@/lib/actions/user.actions";
+import PlaidLink from "./PlaidLink";
 
 const formSchema = (type: string) =>
   z.object({
@@ -36,7 +37,22 @@ const formSchema = (type: string) =>
     address1: type === "sign-in" ? z.string().optional() : z.string().max(50),
     city: type === "sign-in" ? z.string().optional() : z.string().max(20),
     state:
-      type === "sign-in" ? z.string().optional() : z.string().min(2).max(2),
+      type === "sign-in" 
+        ? z.string().optional() 
+        : z.string()
+            .min(2, "State is required")
+            .max(2, "State must be 2 characters")
+            .regex(/^[A-Z]{2}$/, "State must be 2 uppercase letters")
+            .refine((val) => {
+              const validStates = [
+                'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+                'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+                'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+                'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+                'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
+              ];
+              return validStates.includes(val.toUpperCase());
+            }, "Must be a valid US state abbreviation (e.g., CA, NY, TX)"),
     postalcode:
       type === "sign-in" ? z.string().optional() : z.string().min(3).max(6),
     dateOfBirth:
@@ -71,51 +87,65 @@ const AuthForm = ({ type }: { type: string }) => {
       ssn: "",
     },
   });
-  
 
   const onsubmit = async (data: z.infer<typeof FormSchema>) => {
     setIsLoading(true);
-    try{
-      
-      if(type === "sign-up"){
-        const newUser = await signUp(data);
+    try {
+      if (type === "sign-up") {
+        const userData = {
+          firstName: data.firstName!,
+          lastName: data.lastName!,
+          address1: data.address1!,
+          city: data.city!,
+          state: data.state!,
+          postalcode: data.postalcode!,
+          dateOfBirth: data.dateOfBirth!,
+          ssn: data.ssn!,
+          email: data.email,
+          password: data.password,
+        };
+
+        const newUser = await signUp(userData);
         setUser(newUser);
       }
-      if(type === "sign-in"){
+      if (type === "sign-in") {
         // Check if user is already logged in
         const existingUser = await getLoggedInUser();
-        if(existingUser) {
+        if (existingUser) {
           // User is already logged in, redirect to home
           router.push("/");
           return;
         }
-        
+
         const response = await signIn({
           email: data.email,
           password: data.password,
-        })
-        if(response) router.push("/");
+        });
+        if (response) router.push("/");
       }
-    }
-    catch (error: any){
-      console.log(error)
-      
+    } catch (error: any) {
+      console.log(error);
+
       // Handle specific error types
-      if (error.code === 429 || error.type === 'general_rate_limit_exceeded') {
-        alert('Too many sign-in attempts. Please wait a few minutes and try again.');
-      } else if (error.code === 401 && error.type === 'user_session_already_exists') {
-        alert('You are already signed in. Redirecting to home...');
+      if (error.code === 429 || error.type === "general_rate_limit_exceeded") {
+        alert(
+          "Too many sign-in attempts. Please wait a few minutes and try again."
+        );
+      } else if (
+        error.code === 401 &&
+        error.type === "user_session_already_exists"
+      ) {
+        alert("You are already signed in. Redirecting to home...");
         router.push("/");
       } else if (error.code === 401) {
-        alert('Invalid email or password. Please check your credentials.');
+        alert("Invalid email or password. Please check your credentials.");
       } else {
-        alert('An error occurred during authentication. Please try again.');
+        alert("An error occurred during authentication. Please try again.");
       }
-    }
-    finally{
+    } finally {
       setIsLoading(false);
     }
-  }
+  };
 
   return (
     <section className="auth-form">
@@ -146,7 +176,9 @@ const AuthForm = ({ type }: { type: string }) => {
       </header>
 
       {user ? (
-        <div className="flex flex-col gap-4">{/* plaid link */}</div>
+        <div className="flex flex-col gap-4">
+          <PlaidLink user={user} variant="primary" />
+        </div>
       ) : (
         <>
           <Form {...form}>
@@ -159,7 +191,9 @@ const AuthForm = ({ type }: { type: string }) => {
                       name="firstName"
                       render={({ field }) => (
                         <div className="form-item w-full">
-                          <FormLabel className="form-label">First Name</FormLabel>
+                          <FormLabel className="form-label">
+                            First Name
+                          </FormLabel>
                           <div className="flex flex-col w-full">
                             <FormControl>
                               <Input
@@ -180,7 +214,9 @@ const AuthForm = ({ type }: { type: string }) => {
                       name="lastName"
                       render={({ field }) => (
                         <div className="form-item w-full">
-                          <FormLabel className="form-label">Last Name</FormLabel>
+                          <FormLabel className="form-label">
+                            Last Name
+                          </FormLabel>
                           <div className="flex flex-col w-full">
                             <FormControl>
                               <Input
@@ -250,9 +286,14 @@ const AuthForm = ({ type }: { type: string }) => {
                             <FormControl>
                               <Input
                                 type="text"
-                                placeholder="Ex: NY"
-                                className="input-class"
+                                placeholder="CA"
+                                className="input-class uppercase"
+                                maxLength={2}
                                 {...field}
+                                onChange={(e) => {
+                                  const value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+                                  field.onChange(value);
+                                }}
                               />
                             </FormControl>
                             <FormMessage className="form-message mt-2" />
@@ -266,7 +307,9 @@ const AuthForm = ({ type }: { type: string }) => {
                       name="postalcode"
                       render={({ field }) => (
                         <div className="form-item w-full">
-                          <FormLabel className="form-label">Postal Code</FormLabel>
+                          <FormLabel className="form-label">
+                            Postal Code
+                          </FormLabel>
                           <div className="flex flex-col w-full">
                             <FormControl>
                               <Input
@@ -289,7 +332,9 @@ const AuthForm = ({ type }: { type: string }) => {
                       name="dateOfBirth"
                       render={({ field }) => (
                         <div className="form-item w-full">
-                          <FormLabel className="form-label">Date of Birth</FormLabel>
+                          <FormLabel className="form-label">
+                            Date of Birth
+                          </FormLabel>
                           <div className="flex flex-col w-full">
                             <FormControl>
                               <Input
